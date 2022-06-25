@@ -1,28 +1,9 @@
 const express = require('express');
 const { createClient } = require('redis');
 const router = express.Router();
+const { PublicMessage, UserMessage } = require('../messages');
 
-class PublicMessage {
-    message = "";
-    user = "";
-    timestamp = "";
-
-    constructor(message, user) {
-        this.message = message;
-        this.user = user;
-        this.timestamp = new Date().toUTCString();
-    }
-}
-
-class UserMessage extends PublicMessage {
-    sendTo = "";
-    constructor(message, user, sendTo) {
-        super(message, user);
-
-        this.sendTo = sendTo;
-    }
-}
-
+// Redis Client
 const client = createClient();
 
 client.on('error', err => console.err('Redis Client Error', err));
@@ -39,7 +20,7 @@ router.get('/latestPublic', (req, res)=>{
         
         if (result === 1) {
             client.lRange('public', 0, 20).then(result=>{
-                res.send(result);
+                res.send(result.map(message=>new PublicMessage().reconstruct(message)));
             }).catch(e=>console.warn(e))
         } else {
             res.send([]);
@@ -49,14 +30,11 @@ router.get('/latestPublic', (req, res)=>{
 
 router.post('/messagePublic', (req, res) => {
     if (req.body.message && req.body.user) {
-        let message = new PublicMessage(req.body.message, req.body.user);
 
-        client.LPUSH('public', JSON.stringify(message)).then(()=>{
-            res.send("Ok");
-        }).catch(e=>{
-            console.warn(`Redis Error: ${e}`);
-            res.send("Database Error");
-        });
+        let message = new PublicMessage(req.body.message, req.body.user, client);
+
+        message.redisSubmit((result)=>{res.send(result)}, (result)=>{res.send(result)});
+        
     } else {
         res.send("Invalid Message");
     }
@@ -72,7 +50,7 @@ router.get('/latestUser', (req, res)=>{
             
             if (result === 1) {
                 client.lRange(`${req.body.user}_messages`, 0, 20).then(result=>{
-                    res.send(result);
+                    res.send(result.map(message=>new UserMessage().reconstruct(message)));
                 }).catch(e=>{
                     console.warn(`Redis Error: ${e}`);
                     res.send("Database Error");
@@ -88,16 +66,10 @@ router.get('/latestUser', (req, res)=>{
 
 router.post('/messageUser', (req, res)=>{
     if (req.body.message && req.body.user && req.body.sendTo) {
-        let key = `${req.body.sendTo}_messages`;
 
-        let message = new UserMessage(req.body.message, req.body.user, req.body.sendTo);
+        let message = new UserMessage(req.body.message, req.body.user, req.body.sendTo, client);
 
-        client.LPUSH(key, JSON.stringify(message)).then(()=>{
-            res.send("Ok");
-        }).catch(e=>{
-            console.warn(`Redis Error: ${e}`);
-            res.send("Database Error");
-        });
+        message.redisSubmit((result)=>{res.send(result)}, (result)=>{res.send(result)});
     } else {
         res.send("Invalid Message");
     }
