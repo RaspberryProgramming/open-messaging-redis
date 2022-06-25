@@ -4,24 +4,40 @@ const { PublicMessage, UserMessage } = require('./messages');
 // Redis Client
 const client = createClient();
 
-client.on('error', err => console.err('Redis Client Error', err));
+client.on('error', err => console.error('Redis Client Error', err));
 
 client.connect();
 
-const onlineUsers = []; // Used to store users that are online
+let onlineUsers = []; // Used to store users that are online
+
+function isOnline (socketId) {
+    return onlineUsers.filter(v=>v.socket.id === socketId).length === 0;
+}
+
+function getUsername(socketId) {
+    if (isOnline(socketId)){
+        return onlineUsers.filter(v=>v.socket.id === socketId)[0];
+    } else {
+        return null;
+    }
+}
 
 function socketio(socket) {
-    let username;
+    let username = null;
 
     socket.on('login', arg=>{
         // Check that user value was sent back, and that the user isn't already logged in
-        if (arg.user && onlineUsers.filter(v=>v.user === arg.user).length === 0) {
+        if (arg.user && isOnline(socket.id)) {
 
             username = arg.user;
             
             onlineUsers.push({"user": arg.user, "socket": socket});
 
             socket.emit('login-success', {"online": onlineUsers.map(v=>v.user)});
+
+            socket.broadcast.emit('new-login', {"user": username});
+
+            console.log(`${username} Logged In`)
 
         } else {
 
@@ -30,35 +46,34 @@ function socketio(socket) {
         }
     });
 
-    socket.on('publicMessage', arg=>{
-        if (username && arg.message && arg.user) {
+    socket.on('publicMessage', (arg)=>{
 
-            let message = new PublicMessage(arg.message, arg.user);
+        if (isOnline(socket.id) && arg.message && arg.user) {
 
+            let message = new PublicMessage(arg.message, arg.user, client);
 
-
-            io.emit('publicMessage', message);
+            socket.broadcast.emit('publicMessage', message);
 
             message.redisSubmit(
                 (result)=>{console.log('Public Message: ', result)},
-                (result)=>{console.err('Public Message: ', result)});
+                (result)=>{console.error('Public Message: ', result)});
             
         } else {
-            if (!username) {
+            if (!isOnline(socket.id)) {
                 socket.emit('error', 'Client Not Logged In');
 
-                console.err('Client Not Logged In');
+                console.error('Client Not Logged In');
             } else {
                 socket.emit('error', 'Invalid userMessage');
 
-                console.err(`User ${username} sent an invalid userMessage`);
+                console.error(`User ${getUsername(socket.id)} sent an invalid userMessage`);
             }
         }
     })
 
     socket.on('userMessage', arg=>{
-        if (username && arg.message && arg.user && arg.sendTo) {
-            let message = new UserMessage(arg.message, arg.user, arg.sendTo);
+        if (isOnline(socket.id) && arg.message && arg.user && arg.sendTo) {
+            let message = new UserMessage(arg.message, arg.user, arg.sendTo, client);
 
             let recipient = onlineUsers.filter(v=>v.user === arg.user);
 
@@ -70,30 +85,34 @@ function socketio(socket) {
 
                 message.redisSubmit(
                     (result)=>{console.log('User Message: ', result)},
-                    (result)=>{console.err('User Message: ', result)});
+                    (result)=>{console.error('User Message: ', result)});
 
             } else {
-                console.err('Two Users with the same username are logged in: ', arg.user);
+                console.error('Two Users with the same username are logged in: ', arg.user);
             }
         } else {
-            if (!username) {
+            if (!isOnline(socket.id)) {
                 socket.emit('error', 'Client Not Logged In');
 
-                console.err('Client Not Logged In');
+                console.error('Client Not Logged In');
             } else {
                 socket.emit('error', 'Invalid userMessage');
 
-                console.err(`User ${username} sent an invalid userMessage`);
+                console.error(`User ${getUsername(socket.id)} sent an invalid userMessage`);
             }
         }
     });
 
     socket.on("disconnect", ()=>{
         if (username) {
-            io.emit("user-disconnect", {"user": username});
+            socket.broadcast.emit("user-disconnect", {"user": username});
+            
             onlineUsers = onlineUsers.filter(v=>v.user!==username); // Remove user from onlineUsers
+
+            console.log(`${username} Logged Out`);
         }
     })
+    
 };
 
 module.exports = socketio;

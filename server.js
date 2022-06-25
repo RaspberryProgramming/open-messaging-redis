@@ -8,10 +8,18 @@ const socketio = require('socket.io');
 // Const variables
 const app = express();
 const port = 40412; // Api port
-const server = http.createServer(app);
 
 // Socket.io
-const io = socketio(server);
+const server = http.createServer(app);
+
+const io = socketio(server,{
+    cors: {
+        origin: `http://localhost`,
+        methods: ["GET", "POST"]
+      }
+});
+
+server.listen(port);
 
 io.on("connection", require('./messagingSocket'));
 
@@ -22,11 +30,3 @@ app.use(bodyParser.urlencoded({ extended: false }))
 app.use(bodyParser.json())
 
 app.use('/api/messaging', require('./controllers/messagingController'));
-
-app.get('/', (req, res) => {
-    res.send('Hello, This is an API. Please connect using a supported client.');
-});
-
-app.listen(port, () => {
-    console.log(`Server Started on Port ${port}`);
-});
