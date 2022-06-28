@@ -19,7 +19,7 @@ const io = socketio(server,{
       }
 });
 
-server.listen(port);
+server.listen(port, ()=>{console.warn(`Started on port ${port}`)});
 
 io.on("connection", require('./messagingSocket'));
 

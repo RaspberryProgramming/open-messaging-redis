@@ -23,18 +23,22 @@ function getUsername(socketId) {
 }
 
 function socketio(socket) {
+    console.log(socket.conn.remoteAddress);
+    
     let username = null;
 
     socket.on('login', arg=>{
+        
         // Check that user value was sent back, and that the user isn't already logged in
-        if (arg.user && isOnline(socket.id)) {
+        if (!username && arg.user) {
 
             username = arg.user;
             
             onlineUsers.push({"user": arg.user, "socket": socket});
 
-            socket.emit('login-success', {"online": onlineUsers.map(v=>v.user)});
+            socket.emit('login-success', {"online": [...onlineUsers.map(v=>v.user)]});
 
+            socket.broadcast.emit('new-login', {"user": username});
             socket.broadcast.emit('new-login', {"user": username});
 
             console.log(`${username} Logged In`)
@@ -48,18 +52,19 @@ function socketio(socket) {
 
     socket.on('publicMessage', (arg)=>{
 
-        if (isOnline(socket.id) && arg.message && arg.user) {
+        if (username && arg.message && arg.user) {
 
             let message = new PublicMessage(arg.message, arg.user, client);
 
             socket.broadcast.emit('publicMessage', message);
+            socket.emit('publicMessage', message);
 
             message.redisSubmit(
                 (result)=>{console.log('Public Message: ', result)},
                 (result)=>{console.error('Public Message: ', result)});
-            
+
         } else {
-            if (!isOnline(socket.id)) {
+            if (!username) {
                 socket.emit('error', 'Client Not Logged In');
 
                 console.error('Client Not Logged In');
@@ -72,7 +77,7 @@ function socketio(socket) {
     })
 
     socket.on('userMessage', arg=>{
-        if (isOnline(socket.id) && arg.message && arg.user && arg.sendTo) {
+        if (username && arg.message && arg.user && arg.sendTo) {
             let message = new UserMessage(arg.message, arg.user, arg.sendTo, client);
 
             let recipient = onlineUsers.filter(v=>v.user === arg.user);
@@ -91,7 +96,7 @@ function socketio(socket) {
                 console.error('Two Users with the same username are logged in: ', arg.user);
             }
         } else {
-            if (!isOnline(socket.id)) {
+            if (!username) {
                 socket.emit('error', 'Client Not Logged In');
 
                 console.error('Client Not Logged In');
