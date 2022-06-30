@@ -39,7 +39,6 @@ function socketio(socket) {
             socket.emit('login-success', {"online": [...onlineUsers.map(v=>v.user)]});
 
             socket.broadcast.emit('new-login', {"user": username});
-            socket.broadcast.emit('new-login', {"user": username});
 
             console.log(`${username} Logged In`)
 
