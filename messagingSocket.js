@@ -42,6 +42,25 @@ function socketio(socket) {
 
             console.log(`${username} Logged In`)
 
+        } else if (arg.user) {
+
+            socket.broadcast.emit("user-disconnect", {"user": username});
+
+            onlineUsers = onlineUsers.filter(v=>v.user!==username); // Remove user from onlineUsers
+            
+            // Add user
+            onlineUsers.push({"user": arg.user, "socket": socket});
+
+            // Respond Successful login
+            socket.emit('login-success', {"online": [...onlineUsers.map(v=>v.user)]});
+
+            socket.broadcast.emit('new-login', {"user": arg.user});
+
+            // Log Login
+            console.log(`${username} Relogged in As arg.user`)
+
+            username = arg.user;
+
         } else {
 
             socket.emit('error', 'login failure');
@@ -115,7 +134,17 @@ function socketio(socket) {
 
             console.log(`${username} Logged Out`);
         }
-    })
+    });
+
+    socket.on("logout", ()=>{
+        if (username) {
+            socket.broadcast.emit("user-disconnect", {"user": username});
+            
+            onlineUsers = onlineUsers.filter(v=>v.user!==username); // Remove user from onlineUsers
+
+            console.log(`${username} Logged Out`);
+        }
+    });
     
 };
 
